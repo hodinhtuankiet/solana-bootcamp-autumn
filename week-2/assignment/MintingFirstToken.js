@@ -10,10 +10,9 @@ import {
 import {
   createMint,
   getOrCreateAssociatedTokenAccount,
-  mintTo,
-  TOKEN_PROGRAM_ID,
   createMintToInstruction,
   createInitializeMintInstruction,
+  TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 
 import {
@@ -21,39 +20,23 @@ import {
   keypairIdentity
 } from "@metaplex-foundation/js";
 
-import mplTokenMetadata from "@metaplex-foundation/mpl-token-metadata";
-const { createCreateMetadataAccountV2Instruction } = mplTokenMetadata;
-
 import fs from "fs";
 
 async function main() {
-  // 1. Connect to local Solana cluster
+  // 1. Connect to devnet
   const connection = new Connection("https://api.devnet.solana.com", "confirmed");
 
-
-  // 2. Load payer keypair
-  const secretKey = Uint8Array.from(
-    JSON.parse(fs.readFileSync("./my-keypair.json", "utf-8"))
-  );
+  // 2. Load wallet
+  const secretKey = Uint8Array.from(JSON.parse(fs.readFileSync("./my-keypair.json", "utf-8")));
   const payer = Keypair.fromSecretKey(secretKey);
-
   console.log("Your wallet address:", payer.publicKey.toBase58());
 
-  // 3. Airdrop SOL (localnet only)
-  console.log("Requesting local airdrop...");
-  const airdropSig = await connection.requestAirdrop(payer.publicKey, 3e9);
-  await connection.confirmTransaction(airdropSig);
-  console.log("Airdrop received.");
+  // 3. Set up Metaplex
+  const metaplex = Metaplex.make(connection).use(keypairIdentity(payer));
 
-  // 4. Set up Metaplex with Bundlr
-  const metaplex = Metaplex.make(connection)
-  .use(keypairIdentity(payer));
+  const recipientAddress = new PublicKey("63EEC9FfGyksm7PkVC6z8uAmqozbQcTzbkWJNsgqjkFs");
 
-  const recipientAddress = new PublicKey(
-    "63EEC9FfGyksm7PkVC6z8uAmqozbQcTzbkWJNsgqjkFs"
-  );
-
-  // 5. Create Fungible Token
+  // 4. Create fungible token
   const ftMint = await createMint(
     connection,
     payer,
@@ -76,7 +59,6 @@ async function main() {
     recipientAddress
   );
 
-  // 6. Mint fungible tokens
   const mint100Ix = createMintToInstruction(
     ftMint,
     payerTokenAccount.address,
@@ -91,55 +73,50 @@ async function main() {
     10 * 1e6
   );
 
-  // 7. Create NFT mint
+  // 5. Create and initialize NFT mint
   const nftMint = Keypair.generate();
-  const nftMintTx = new Transaction();
+  const createNftMintTx = new Transaction();
 
-  nftMintTx.add(
+  createNftMintTx.add(
     SystemProgram.createAccount({
       fromPubkey: payer.publicKey,
       newAccountPubkey: nftMint.publicKey,
       space: 82,
       lamports: await connection.getMinimumBalanceForRentExemption(82),
       programId: TOKEN_PROGRAM_ID,
-    })
+    }),
+    createInitializeMintInstruction(
+      nftMint.publicKey,
+      0,
+      payer.publicKey,
+      payer.publicKey
+    )
   );
 
-  const initMintIx = createInitializeMintInstruction(
+  await sendAndConfirmTransaction(connection, createNftMintTx, [payer, nftMint]);
+
+  // 6. Create NFT token account
+  const nftTokenAccount = await getOrCreateAssociatedTokenAccount(
+    connection,
+    payer,
     nftMint.publicKey,
-    0,
-    payer.publicKey,
     payer.publicKey
   );
 
-  nftMintTx.add(initMintIx);
+  // 7. Mint 1 NFT token
+  const mintNFTIx = createMintToInstruction(
+    nftMint.publicKey,
+    nftTokenAccount.address,
+    payer.publicKey,
+    1
+  );
 
-  // 8. Create metadata
-  const metadataPDA = await metaplex.nfts().pdas().metadata({
-    mint: nftMint.publicKey,
-  });
-
-  const nftMetadataData = {
-    name: "My Cool NFT",
-    symbol: "MCNFT",
-    uri: "https://example.com/nft-metadata.json",
-    sellerFeeBasisPoints: 1000,
-    creators: [
-      {
-        address: payer.publicKey,
-        verified: true,
-        share: 100,
-      },
-    ],
-    collection: null,
-    uses: null,
-  };
-
+  // 8. Create metadata using Metaplex
   const { nft } = await metaplex.nfts().create({
     uri: "https://example.com/nft-metadata.json",
     name: "My Cool NFT",
-    sellerFeeBasisPoints: 1000,
     symbol: "MCNFT",
+    sellerFeeBasisPoints: 1000,
     creators: [
       {
         address: payer.publicKey,
@@ -151,34 +128,16 @@ async function main() {
     maxSupply: 1,
   });
 
+  // 9. Final transaction for minting tokens and NFT
+  const finalTx = new Transaction();
+  finalTx.add(mint100Ix, mint10Ix, mintNFTIx);
 
-  const nftTokenAccount = await getOrCreateAssociatedTokenAccount(
-    connection,
-    payer,
-    nftMint.publicKey,
-    payer.publicKey
-  );
-
-  const mintNFTIx = createMintToInstruction(
-    nftMint.publicKey,
-    nftTokenAccount.address,
-    payer.publicKey,
-    1
-  );
-
-  // 9. Final Transaction
-  const tx = new Transaction();
-  tx.add(mint100Ix, mint10Ix);
-  tx.add(...nftMintTx.instructions);
-  tx.add(createMetadataIx);
-  tx.add(mintNFTIx);
-
-  const signers = [payer, nftMint];
-  const txid = await sendAndConfirmTransaction(connection, tx, signers);
+  const txid = await sendAndConfirmTransaction(connection, finalTx, [payer]);
 
   console.log("✅ Transaction signature:", txid);
   console.log("✅ Fungible Token Mint:", ftMint.toBase58());
   console.log("✅ NFT Mint:", nftMint.publicKey.toBase58());
+  console.log("✅ Metadata created with URI:", nft.uri);
 }
 
 main().catch(console.error);
