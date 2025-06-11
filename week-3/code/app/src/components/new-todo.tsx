@@ -20,13 +20,15 @@ import {
 import { IdlAccounts } from "@coral-xyz/anchor";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { IDL } from "../../../target/types/todo_app";
+// Change from ../../../ to ../ (go up 1 level from components/ to src/, then to code/)
+import { IDL } from "../../target/types/todo_app";
 
 export default function NewTodo({
   profile,
 }: {
   profile: IdlAccounts<typeof IDL>["profile"];
 }) {
+  // ...rest of your component remains the same
   const { isOpen, onOpen, onClose } = useDisclosure();
 
   const toast = useToast();

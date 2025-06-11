@@ -1,15 +1,34 @@
 import { AnchorProvider, IdlAccounts, Program, utils } from "@coral-xyz/anchor";
-import { TodoApp, IDL } from "../../../target/types/todo_app";
 import { Cluster, PublicKey, SystemProgram } from "@solana/web3.js";
 import { getProgramId } from "./helper";
+
+// Import the IDL type definition
+import { TodoApp } from "../../../target/types/todo_app";
+// Import the IDL JSON directly
+import idlJson from "../../../target/idl/todo_app.json";
 
 export default class TodoProgram {
   program: Program<TodoApp>;
   provider: AnchorProvider;
 
   constructor(provider: AnchorProvider, cluster: Cluster = "devnet") {
+    if (!provider) {
+      throw new Error("Provider is required");
+    }
+    if (!provider.publicKey) {
+      throw new Error("Wallet not connected");
+    }
+
+    // Validate IDL JSON exists
+    if (!idlJson) {
+      throw new Error("IDL not found. Make sure to run 'anchor build' first.");
+    }
+
+    console.log("IDL loaded successfully:", idlJson.name);
     this.provider = provider;
-    this.program = new Program(IDL, getProgramId(cluster), provider);
+
+    // Use idlJson directly instead of casting
+    this.program = new Program(idlJson, getProgramId(cluster), provider);
   }
 
   createProfile(name: string) {
@@ -57,7 +76,7 @@ export default class TodoProgram {
     return builder.transaction();
   }
 
-  async fetchTodos(profile: IdlAccounts<typeof IDL>["profile"]) {
+  async fetchTodos(profile: IdlAccounts<TodoApp>["profile"]) {
     const todoCount = profile.todoCount;
 
     const todoPdas: PublicKey[] = [];

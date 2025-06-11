@@ -1,5 +1,6 @@
 "use client";
 
+import { useWallet } from "@solana/wallet-adapter-react";
 import useAnchorProvider from "@/hooks/use-anchor-provider";
 import TodoProgram from "@/lib/todo-program";
 import {
@@ -18,27 +19,46 @@ import {
   useToast,
 } from "@chakra-ui/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function NewProfile() {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
-
   const queryClient = useQueryClient();
 
-  const [name, setName] = useState("");
+  // Add state to track if component is mounted (client-side)
+  const [isMounted, setIsMounted] = useState(false);
 
+  const { publicKey } = useWallet();
+  const [name, setName] = useState("");
   const provider = useAnchorProvider();
 
+  // Ensure component only renders on client-side
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // Move all hooks BEFORE any conditional returns
   const { isPending, mutateAsync } = useMutation({
-    mutationKey: ["create-profile", provider.publicKey],
+    mutationKey: ["create-profile", provider?.publicKey],
     mutationFn: async (name: string) => {
+      if (!provider) {
+        throw new Error("Wallet not connected");
+      }
+
+      // Add additional validation for provider properties
+      if (!provider.publicKey) {
+        throw new Error("Wallet public key not available");
+      }
+
+      // Add validation for wallet methods
+      if (!provider.wallet?.signTransaction || !provider.wallet?.signAllTransactions) {
+        throw new Error("Wallet does not support required signing methods");
+      }
+
       const program = new TodoProgram(provider);
-
       const tx = await program.createProfile(name);
-
       const signature = await provider.sendAndConfirm(tx);
-
       return signature;
     },
     onSuccess: (tx) => {
@@ -49,11 +69,16 @@ export default function NewProfile() {
       });
 
       return queryClient.invalidateQueries({
-        queryKey: ["profile", provider.publicKey.toBase58()],
+        queryKey: ["profile", provider?.publicKey?.toBase58()],
       });
     },
     onError: (error) => {
       console.error(error);
+      toast({
+        title: "Error creating profile",
+        description: error.message,
+        status: "error",
+      });
     },
     onSettled: () => {
       onClose();
@@ -62,8 +87,30 @@ export default function NewProfile() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!name.trim()) {
+      toast({
+        title: "Name is required",
+        status: "warning",
+      });
+      return;
+    }
     mutateAsync(name);
   };
+
+  // NOW you can have conditional returns AFTER all hooks
+  // Don't render anything until mounted on client-side
+  if (!isMounted) {
+    return null;
+  }
+
+  // Show disabled button if wallet not connected
+  if (!publicKey || !provider) {
+    return (
+      <Button disabled colorScheme="blue">
+        Connect wallet to create profile
+      </Button>
+    );
+  }
 
   return (
     <>
@@ -82,6 +129,7 @@ export default function NewProfile() {
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 placeholder="Your name"
+                required
               />
             </FormControl>
           </ModalBody>
