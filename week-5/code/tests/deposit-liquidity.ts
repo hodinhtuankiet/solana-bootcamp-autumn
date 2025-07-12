@@ -3,9 +3,9 @@ import { Program } from "@coral-xyz/anchor";
 import { Amm } from "../target/types/amm";
 import { assert } from "chai";
 import {
-  ASSOCIATED_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
-} from "@coral-xyz/anchor/dist/cjs/utils/token";
+} from "@solana/spl-token";
 import { mintToken } from "./utils";
 import { getAccount, getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { BN } from "bn.js";
@@ -156,7 +156,7 @@ describe("deposit-liquidity", () => {
         poolAccountB: poolAccountB,
         payer: provider.publicKey,
         tokenProgram: TOKEN_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: anchor.web3.SystemProgram.programId,
       })
       .rpc();
@@ -202,7 +202,7 @@ describe("deposit-liquidity", () => {
         depositor: depositor.publicKey,
 
         tokenProgram: TOKEN_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: anchor.web3.SystemProgram.programId,
       })
       .signers([depositor])
@@ -260,7 +260,7 @@ describe("deposit-liquidity", () => {
         depositor: depositor.publicKey,
 
         tokenProgram: TOKEN_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: anchor.web3.SystemProgram.programId,
       })
       .signers([depositor])

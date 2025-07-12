@@ -9,7 +9,6 @@ declare_id!("8QNTeqVq25xDKycxbcyKQPXQShcGLhatWwiZ6MqJQ1we");
 #[program]
 pub mod amm {
     pub use super::instructions::*;
-
     use super::*;
 
     pub fn create_amm(ctx: Context<CreateAmm>, id: Pubkey, fee: u16) -> Result<()> {

@@ -13,7 +13,7 @@ pub fn create_amm(ctx: Context<CreateAmm>, id: Pubkey, fee: u16) -> Result<()> {
 }
 
 #[derive(Accounts)]
-#[instruction(id: Pubkey, fee: i16)]
+#[instruction(id: Pubkey, fee: u16)]
 pub struct CreateAmm<'info> {
     #[account(
         init,

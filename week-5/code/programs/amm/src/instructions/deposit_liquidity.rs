@@ -3,9 +3,25 @@ use anchor_spl::{
     associated_token::AssociatedToken,
     token::{self, Mint, MintTo, Token, TokenAccount, Transfer},
 };
-use spl_math::uint::U256;
 
 use crate::state::Pool;
+
+// Helper function to calculate integer square root
+fn sqrt(n: u64) -> u64 {
+    if n == 0 {
+        return 0;
+    }
+    
+    let mut x = n;
+    let mut y = (x + 1) / 2;
+    
+    while y < x {
+        x = y;
+        y = (x + n / x) / 2;
+    }
+    
+    x
+}
 
 pub fn deposit_liquidity(
     ctx: Context<DepositLiquidity>,
@@ -33,22 +49,20 @@ pub fn deposit_liquidity(
         (amount_a, amount_b)
     } else {
         // dx = X. dy / Y, dy = Y.dx / x
-        let ideal_amount_a = U256::from(pool_a.amount)
-            .checked_mul(U256::from(amount_b))
+        let ideal_amount_a = (pool_a.amount as u128)
+            .checked_mul(amount_b as u128)
             .unwrap()
-            .checked_div(U256::from(pool_b.amount))
-            .unwrap()
-            .as_u64();
+            .checked_div(pool_b.amount as u128)
+            .unwrap() as u64;
 
         if amount_a >= ideal_amount_a {
             (ideal_amount_a, amount_b)
         } else {
-            let ideal_amount_b = U256::from(pool_b.amount)
-                .checked_mul(U256::from(amount_a))
+            let ideal_amount_b = (pool_b.amount as u128)
+                .checked_mul(amount_a as u128)
                 .unwrap()
-                .checked_div(U256::from(pool_a.amount))
-                .unwrap()
-                .as_u64();
+                .checked_div(pool_a.amount as u128)
+                .unwrap() as u64;
 
             (amount_a, ideal_amount_b)
         }
@@ -84,18 +98,15 @@ pub fn deposit_liquidity(
     let lp_supply = ctx.accounts.mint_liquidity.supply;
 
     let liquidity = if lp_supply == 0 {
-        U256::from(amount_a)
-            .checked_mul(U256::from(amount_b))
-            .unwrap()
-            .integer_sqrt()
-            .as_u64()
+        sqrt((amount_a as u128)
+            .checked_mul(amount_b as u128)
+            .unwrap() as u64)
     } else {
-        U256::from(amount_a)
-            .checked_mul(U256::from(lp_supply))
+        (amount_a as u128)
+            .checked_mul(lp_supply as u128)
             .unwrap()
-            .checked_div(U256::from(pool_a.amount))
-            .unwrap()
-            .as_u64()
+            .checked_div(pool_a.amount as u128)
+            .unwrap() as u64
     };
 
     let authority_bump = ctx.bumps.pool_authority;

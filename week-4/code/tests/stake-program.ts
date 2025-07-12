@@ -30,73 +30,71 @@ describe("stake-program", () => {
   let stakeInfo: anchor.web3.PublicKey;
 
   before(async () => {
-    // init staker
-    {
-      await provider.connection.confirmTransaction(
-        await provider.connection.requestAirdrop(
-          staker.publicKey,
-          anchor.web3.LAMPORTS_PER_SOL
-        )
+    // Ensure the provider's wallet has enough lamports
+    const providerBalance = await provider.connection.getBalance(provider.publicKey);
+    const requiredLamports = await getMinimumBalanceForRentExemptMint(provider.connection);
+
+    if (providerBalance < requiredLamports + anchor.web3.LAMPORTS_PER_SOL) {
+      const airdropSignature = await provider.connection.requestAirdrop(
+        provider.publicKey,
+        anchor.web3.LAMPORTS_PER_SOL * 2 // Airdrop 2 SOL
       );
+      await provider.connection.confirmTransaction(airdropSignature);
     }
-    // create USDC-fake mint
-    {
-      const tx = new anchor.web3.Transaction();
 
-      const lamports = await getMinimumBalanceForRentExemptMint(
-        provider.connection
-      );
+    // Create USDC-fake mint
+    const tx = new anchor.web3.Transaction();
 
-      const createMintIx = anchor.web3.SystemProgram.createAccount({
-        fromPubkey: provider.publicKey,
-        newAccountPubkey: usdcMintKp.publicKey,
-        space: MINT_SIZE,
-        lamports,
-        programId: TOKEN_PROGRAM_ID,
-      });
+    const lamports = await getMinimumBalanceForRentExemptMint(provider.connection);
 
-      const initMintIx = createInitializeMint2Instruction(
-        usdcMintKp.publicKey,
-        6,
-        provider.publicKey,
-        provider.publicKey,
-        TOKEN_PROGRAM_ID
-      );
+    const createMintIx = anchor.web3.SystemProgram.createAccount({
+      fromPubkey: provider.publicKey,
+      newAccountPubkey: usdcMintKp.publicKey,
+      space: MINT_SIZE,
+      lamports,
+      programId: TOKEN_PROGRAM_ID,
+    });
 
-      stakerTokenAccount = getAssociatedTokenAddressSync(
-        usdcMintKp.publicKey,
-        staker.publicKey
-      );
+    const initMintIx = createInitializeMint2Instruction(
+      usdcMintKp.publicKey,
+      6,
+      provider.publicKey,
+      provider.publicKey,
+      TOKEN_PROGRAM_ID
+    );
 
-      const createStakerTokenAccountIx =
-        createAssociatedTokenAccountInstruction(
-          staker.publicKey,
-          stakerTokenAccount,
-          staker.publicKey,
-          usdcMintKp.publicKey
-        );
+    stakerTokenAccount = getAssociatedTokenAddressSync(
+      usdcMintKp.publicKey,
+      staker.publicKey
+    );
 
-      const mintToStakerIx = createMintToInstruction(
-        usdcMintKp.publicKey,
-        stakerTokenAccount,
-        provider.publicKey,
-        1000 * 10 ** 6,
-        []
-      );
+    const createStakerTokenAccountIx = createAssociatedTokenAccountInstruction(
+      staker.publicKey,
+      stakerTokenAccount,
+      staker.publicKey,
+      usdcMintKp.publicKey
+    );
 
-      tx.add(
-        ...[
-          createMintIx,
-          initMintIx,
-          createStakerTokenAccountIx,
-          mintToStakerIx,
-        ]
-      );
+    const mintToStakerIx = createMintToInstruction(
+      usdcMintKp.publicKey,
+      stakerTokenAccount,
+      provider.publicKey,
+      1000 * 10 ** 6,
+      []
+    );
 
-      const ts = await provider.sendAndConfirm(tx, [usdcMintKp, staker]);
+    tx.add(
+      ...[
+        createMintIx,
+        initMintIx,
+        createStakerTokenAccountIx,
+        mintToStakerIx,
+      ]
+    );
 
-      console.log("Your transaction signature", ts);
-    }
+    const ts = await provider.sendAndConfirm(tx, [usdcMintKp, staker]);
+
+    console.log("Your transaction signature", ts);
 
     rewardVault = anchor.web3.PublicKey.findProgramAddressSync(
       [Buffer.from("reward")],
@@ -107,8 +105,9 @@ describe("stake-program", () => {
   it("Is initialized!", async () => {
     const tx = await program.methods
       .initialize()
-      .accounts({
+      .accountsPartial({
         admin: provider.publicKey,
+        // rewardVaultAccount: rewardVault,
         rewardVault: rewardVault,
         mint: usdcMintKp.publicKey,
         systemProgram: anchor.web3.SystemProgram.programId,
@@ -145,7 +144,7 @@ describe("stake-program", () => {
 
     const tx = await program.methods
       .stake(stakeAmount)
-      .accounts({
+      .accountsPartial({
         staker: staker.publicKey,
         mint: usdcMintKp.publicKey,
         stakeInfo: stakeInfo,
@@ -209,7 +208,7 @@ describe("stake-program", () => {
 
     const tx = await program.methods
       .unstake()
-      .accounts({
+      .accountsPartial({
         staker: staker.publicKey,
         mint: usdcMintKp.publicKey,
         stakeInfo: stakeInfo,
